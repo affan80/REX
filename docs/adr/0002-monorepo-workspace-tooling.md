@@ -33,12 +33,12 @@ Chosen option: "uv workspaces + pnpm workspaces + a `justfile`", decided by the 
 
 ### Consequences
 
-* Good, because `uv.lock` and `pnpm-lock.yaml` lock every dependency (including transitive ones and tool dependencies), with release cooldowns: `exclude-newer` in uv and `minimumReleaseAge` in pnpm.
+* Good, because `uv.lock` and `pnpm-lock.yaml` lock all workspace dependencies, including transitive ones and the dev dependency groups. Release cooldowns are available: pnpm's `minimumReleaseAge` is on by default (1 day; REX raises it to 7), and uv's `exclude-newer` must be set explicitly (#37). Standalone binaries such as `just` itself sit outside both lockfiles and are pinned separately.
 * Good, because each service, worker and package is its own workspace member with explicit dependencies. That makes import boundaries enforceable (#26).
 * Good, because the tools are fast and their official GitHub Actions (`astral-sh/setup-uv`, `pnpm/action-setup`) are maintained by the tool authors.
 * Bad, because there is no cross-language task graph or build cache. CI uses change detection inside the workflow to skip unaffected jobs instead.
 * Bad, because the two languages are upgraded separately: two lockfiles and two Dependabot ecosystems.
-* Neutral, because `just` is a separate binary. CI installs it pinned; contributors install it locally (Homebrew or the `rust-just` PyPI package).
+* Neutral, because `just` is a separate binary. CI installs it pinned; contributors install it locally, from Homebrew or the `rust-just` PyPI package. `rust-just` is third-party packaging, listed in just's README; it should be pinned to a version.
 
 ### Confirmation
 
@@ -74,7 +74,7 @@ Chosen option: "uv workspaces + pnpm workspaces + a `justfile`", decided by the 
 * Bad, because it brings its own lockfile and resolve concepts that differ from standard Python tooling.
 * Licence: `Apache-2.0`. Allowed.
 * Security: strong hermeticity. The Pants runtime itself is another large toolchain to trust.
-* Version checked: 2.32.2 (2026-11-01).
+* Version checked: 2.33.2 (2026-11-01; the newest stable release, although GitHub marks a later-published 2.32.2 backport as "latest").
 
 ### moon
 
