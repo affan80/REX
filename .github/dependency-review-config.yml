@@ -1,0 +1,26 @@
+# Single source of truth for REX's dependency licence policy (issue #38).
+# Read directly by actions/dependency-review-action (config-file input, v5) and
+# by scripts/license_policy.py. Human-readable policy: docs/security/dependency-licenses.md
+# Changing this file needs an owner-approved PR; keep the policy doc in sync
+# (scripts/license_policy.py check fails on drift).
+
+# Fail pull requests that introduce vulnerabilities of this severity or higher.
+fail-on-severity: high
+
+# Owner-approved allowlist (2026-11-27). Canonical SPDX ids only (SPDX License List 3.29).
+allow-licenses:
+  - MIT
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - Apache-2.0
+  - ISC
+  - PSF-2.0
+  - 0BSD
+  - CC0-1.0
+  - Unlicense
+  - Zlib
+  - MPL-2.0
+
+# Per-package exceptions (package URLs), each documented in the policy doc with a
+# reason and an issue. None yet.
+allow-dependencies-licenses: []
