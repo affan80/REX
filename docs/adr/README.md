@@ -21,3 +21,4 @@ uv run --no-project --with markdown-it-py==4.3.0 python scripts/check_docs.py
 | ADR | Title | Status | Issue |
 |---|---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions as MADR files in docs/adr | accepted | #39 |
+| [0002](0002-monorepo-workspace-tooling.md) | Use uv workspaces, pnpm workspaces and a justfile for the REX monorepo | accepted | #1 |
