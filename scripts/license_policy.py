@@ -2,20 +2,25 @@
 """Dependency licence policy checker for REX (issue #38).
 
 `license_policy.py check` validates the single source of truth for allowed
-dependency licences, `.github/dependency-review-config.yml`, against the policy
-in `docs/security/dependency-licenses.md`:
+dependency licences, `.github/dependency-review-config.yml` (read by
+actions/dependency-review-action v5), against the policy in
+`docs/security/dependency-licenses.md`:
 
-  LP-CONFIG       config exists, parses, and has a non-empty allow-licenses list
+  LP-CONFIG       config exists and parses the way the action parses it (no duplicate
+                  keys; lists or comma-separated strings only), allow-licenses is
+                  non-empty without duplicates, and nothing switches enforcement off
+                  (license-check: false, warn-only: true)
   LP-SPDX         every allowed id is a canonical, non-deprecated SPDX licence id
-  LP-DENIED       no copyleft or source-available licence (GPL, AGPL, LGPL, SSPL, BUSL)
+  LP-DENIED       every allowed id is in the owner-approved set (APPROVED below)
   LP-DENY-OPTION  the deprecated deny-licenses option is not used
   LP-EXCEPTION    each allow-dependencies-licenses entry is a valid purl, documented
                   in the policy with a reason and an issue reference
-  LP-DOC          the policy doc exists and its allowlist equals the config
+  LP-DOC          the policy doc exists, and its allowlist and exceptions equal the config's
 
 Output: one '<path>: <CODE> <detail>' line per finding; exit 1 if any, else 0.
 Run: uv run --no-project --with pyyaml==6.0.4 --with license-expression==30.4.4 \
-       --with packageurl-python==0.17.6 python scripts/license_policy.py check
+       --with packageurl-python==0.17.6 --with markdown-it-py==4.3.0 \
+       python scripts/license_policy.py check
 """
 
 from __future__ import annotations
@@ -27,13 +32,58 @@ from pathlib import Path
 
 import yaml
 from license_expression import get_license_index
+from markdown_it import MarkdownIt
 from packageurl import PackageURL
 
 CONFIG = ".github/dependency-review-config.yml"
 DOC = "docs/security/dependency-licenses.md"
-DENIED = re.compile(r"^(A?GPL|LGPL|SSPL|BUSL)-", re.IGNORECASE)
-ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|(.*)$")
-ISSUE = re.compile(r"^(#\d+|https://github\.com/[^/\s]+/[^/\s]+/issues/\d+)$")
+
+# The owner-approved allowlist (2026-11-27). Changing it needs an owner-approved PR
+# that edits this set, the config and the policy doc together.
+APPROVED = frozenset({
+    "MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC", "PSF-2.0",
+    "0BSD", "CC0-1.0", "Unlicense", "Zlib", "MPL-2.0",
+})
+
+ISSUE = re.compile(
+    r"^(?:#\d+"
+    r"|[\w.-]+/[\w.-]+#\d+"
+    r"|https://github\.com/[\w.-]+/[\w.-]+/(?:issues|pull)/\d+"
+    r"|\[[^\]]+\]\(https://github\.com/[\w.-]+/[\w.-]+/(?:issues|pull)/\d+\))$"
+)
+MD = MarkdownIt("commonmark").enable("table")
+
+
+class ConfigError(Exception):
+    pass
+
+
+class StrictLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate keys, like the `yaml` package the action uses."""
+
+
+def _no_duplicates(loader: StrictLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ConfigError(f"duplicate key {key!r}")
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates)
+
+
+def as_list(value: object, key: str) -> list[str]:
+    """Normalise like the action: a list of strings, or one comma-separated string."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list) and all(isinstance(v, str) for v in value):
+        return [v.strip() for v in value]
+    raise ConfigError(f"{key} must be a list of strings or a comma-separated string")
 
 
 def canonical_spdx_ids() -> set[str]:
@@ -43,24 +93,32 @@ def canonical_spdx_ids() -> set[str]:
 
 
 def doc_tables(text: str) -> tuple[list[str], dict[str, tuple[str, str]]]:
-    """(allowed ids, {purl: (reason, issue)}) from the policy doc's two tables."""
+    """(allowed ids, {purl: (reason, issue)}) from the tables under '## Allowed…' and '## Exceptions'."""
     allowed: list[str] = []
     exceptions: dict[str, tuple[str, str]] = {}
-    section = ""
-    for line in text.splitlines():
-        if line.startswith("## "):
-            section = line[3:].strip().lower()
-            continue
-        match = ROW.match(line.strip())
-        if not match:
-            continue
-        key, rest = match.group(1).strip(), [c.strip() for c in match.group(2).rstrip().rstrip("|").split("|")]
-        if section.startswith("allowed"):
-            allowed.append(key)
-        elif section.startswith("exceptions"):
-            reason = rest[0] if rest else ""
-            issue = rest[1] if len(rest) > 1 else ""
-            exceptions[key] = (reason, issue)
+    section, in_body, row, cells = "", False, False, []
+    for tok in MD.parse(text):
+        if tok.type == "heading_open" and tok.tag == "h2":
+            section = "heading"
+        elif tok.type == "inline" and section == "heading":
+            section = tok.content.strip().lower()
+        elif tok.type == "tbody_open":
+            in_body = True
+        elif tok.type == "tbody_close":
+            in_body = False
+        elif tok.type == "tr_open" and in_body:
+            row, cells = True, []
+        elif tok.type == "inline" and row:
+            cells.append(tok.content.strip())
+        elif tok.type == "tr_close" and row:
+            row = False
+            if not cells or not (cells[0].startswith("`") and cells[0].endswith("`")):
+                continue
+            key = cells[0].strip("`").strip()
+            if section.startswith("allowed"):
+                allowed.append(key)
+            elif section.startswith("exceptions"):
+                exceptions[key] = (cells[1] if len(cells) > 1 else "", cells[2] if len(cells) > 2 else "")
     return allowed, exceptions
 
 
@@ -78,36 +136,38 @@ def check(root: Path) -> int:
     def report(path: str, code: str, detail: str) -> None:
         findings.append(f"{path}: {code} {detail}")
 
-    data: dict = {}
+    allow: list[str] = []
+    exceptions: list[str] = []
     config_path = root / CONFIG
     if not config_path.is_file():
         report(CONFIG, "LP-CONFIG", "missing")
     else:
         try:
-            loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            data = loaded if isinstance(loaded, dict) else {}
-            if not isinstance(loaded, dict):
-                report(CONFIG, "LP-CONFIG", "not a YAML mapping")
-        except yaml.YAMLError as exc:
-            report(CONFIG, "LP-CONFIG", f"invalid YAML: {str(exc).splitlines()[0]}")
-
-    allow = data.get("allow-licenses") or []
-    if isinstance(allow, str):
-        allow = [part.strip() for part in allow.split(",") if part.strip()]
-    if config_path.is_file() and not allow and not any(f.startswith(f"{CONFIG}: LP-CONFIG") for f in findings):
-        report(CONFIG, "LP-CONFIG", "allow-licenses is empty")
-    if "deny-licenses" in data:
-        report(CONFIG, "LP-DENY-OPTION", "deny-licenses is deprecated; use allow-licenses only")
+            data = yaml.load(config_path.read_text(encoding="utf-8"), Loader=StrictLoader)  # noqa: S506 - SafeLoader subclass
+            if not isinstance(data, dict):
+                raise ConfigError("not a YAML mapping")
+            allow = as_list(data.get("allow-licenses"), "allow-licenses")
+            exceptions = as_list(data.get("allow-dependencies-licenses"), "allow-dependencies-licenses")
+            if not allow:
+                report(CONFIG, "LP-CONFIG", "allow-licenses is empty")
+            for lic in sorted({lic for lic in allow if allow.count(lic) > 1}):
+                report(CONFIG, "LP-CONFIG", f"duplicate allow-licenses entry {lic}")
+            if data.get("license-check") is False:
+                report(CONFIG, "LP-CONFIG", "license-check: false disables the licence policy")
+            if data.get("warn-only") is True:
+                report(CONFIG, "LP-CONFIG", "warn-only: true turns every failure into a warning")
+            if "deny-licenses" in data:
+                report(CONFIG, "LP-DENY-OPTION", "deny-licenses is deprecated; use allow-licenses only")
+        except (yaml.YAMLError, ConfigError) as exc:
+            report(CONFIG, "LP-CONFIG", f"invalid: {str(exc).splitlines()[0]}")
 
     spdx = canonical_spdx_ids()
     for lic in allow:
-        lic = str(lic)
-        if DENIED.match(lic):
-            report(CONFIG, "LP-DENIED", f"{lic} is not allowed by policy")
         if lic not in spdx:
             report(CONFIG, "LP-SPDX", f"{lic!r} is not a canonical SPDX licence id")
+        if lic not in APPROVED:
+            report(CONFIG, "LP-DENIED", f"{lic} is not in the owner-approved allowlist")
 
-    exceptions = [str(p) for p in (data.get("allow-dependencies-licenses") or [])]
     doc_path = root / DOC
     doc_allowed: list[str] = []
     doc_exceptions: dict[str, tuple[str, str]] = {}
@@ -115,19 +175,22 @@ def check(root: Path) -> int:
         report(DOC, "LP-DOC", "missing policy document")
     else:
         doc_allowed, doc_exceptions = doc_tables(doc_path.read_text(encoding="utf-8"))
-        if sorted(doc_allowed) != sorted(str(a) for a in allow):
-            only_doc = sorted(set(doc_allowed) - set(map(str, allow)))
-            only_cfg = sorted(set(map(str, allow)) - set(doc_allowed))
-            report(DOC, "LP-DOC", f"allowlist differs from {CONFIG}: only in doc {only_doc}, only in config {only_cfg}")
+        if sorted(doc_allowed) != sorted(allow):
+            report(DOC, "LP-DOC", f"allowlist differs from {CONFIG}: "
+                   f"only in doc {sorted(set(doc_allowed) - set(allow))}, "
+                   f"only in config {sorted(set(allow) - set(doc_allowed))}")
+        for purl in sorted(set(doc_exceptions) - set(exceptions)):
+            report(DOC, "LP-DOC", f"exception {purl} is documented but not in {CONFIG}")
 
     for purl in exceptions:
         if not valid_purl(purl):
             report(CONFIG, "LP-EXCEPTION", f"{purl!r} is not a valid package URL")
             continue
-        reason, issue = doc_exceptions.get(purl, ("", ""))
         if purl not in doc_exceptions:
             report(DOC, "LP-EXCEPTION", f"{purl} is not documented")
-        elif not reason or not ISSUE.match(issue):
+            continue
+        reason, issue = doc_exceptions[purl]
+        if not reason or ISSUE.match(reason) or not ISSUE.match(issue):
             report(DOC, "LP-EXCEPTION", f"{purl} needs a reason and an issue reference")
 
     if findings:

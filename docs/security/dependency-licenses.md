@@ -2,7 +2,7 @@
 
 REX is licensed under the [Apache License 2.0](../../LICENSE) (hard rule 14). Every dependency (Python, JavaScript, GitHub Actions, container images and the analysis tools REX runs) must have a licence that lets us use and distribute REX under Apache-2.0.
 
-**Approved by the owner on 2026-11-27.** Changes need an owner-approved pull request.
+**Approved by the owner on 2026-11-27.** Changes need an owner-approved pull request that updates the config, this page and the approved set in `scripts/license_policy.py` together.
 
 ## Source of truth
 
@@ -10,11 +10,23 @@ The machine-readable policy is [`.github/dependency-review-config.yml`](../../.g
 - `allow-licenses` is the allowlist below;
 - `allow-dependencies-licenses` holds the per-package exceptions below, as package URLs.
 
-GitHub's dependency review reads that file on every pull request. osv-scanner will use the same list for full-lockfile scans (#23). `scripts/license_policy.py check` fails if this page and the config disagree, if an id isn't a canonical SPDX id, if a denied licence is allowlisted, or if an exception lacks a reason and an issue. Run it with:
+**Enforcement status:** nothing runs in CI yet.
+- GitHub's dependency review (`actions/dependency-review-action`, `config-file`) is wired in #22 and checks the dependencies each pull request adds.
+- osv-scanner is wired in #23 and checks the full lockfiles against the same list.
+- Dependency review **only warns** about dependencies whose licence it cannot detect, so unknown licences are caught by osv-scanner (#23) and in pull-request review, not by dependency review.
+
+`scripts/license_policy.py check` keeps the policy itself honest. It fails when:
+- this page and the config disagree;
+- an id isn't a canonical SPDX id, or isn't in the owner-approved set;
+- an option would switch enforcement off (`license-check: false`, `warn-only: true`);
+- an exception lacks a valid package URL, a reason or an issue.
+
+Run it with:
 
 ```bash
 uv run --no-project --with pyyaml==6.0.4 --with license-expression==30.4.4 \
-  --with packageurl-python==0.17.6 python scripts/license_policy.py check
+  --with packageurl-python==0.17.6 --with markdown-it-py==4.3.0 \
+  python scripts/license_policy.py check
 ```
 
 ## Allowed licences
@@ -35,17 +47,17 @@ Canonical [SPDX](https://spdx.org/licenses/) ids (SPDX License List 3.29). For a
 | `Zlib` |
 | `MPL-2.0` |
 
-`MPL-2.0` is weak, file-level copyleft. Using an unmodified MPL library is fine. If you modify MPL-licensed files, those files stay MPL and their source must be published.
+`MPL-2.0` is weak, file-level copyleft. Using an unmodified MPL library is fine. If you modify MPL-licensed files, those files stay MPL, and when you distribute them their source must be made available to recipients.
 
 ## Denied by default
 
 | Licence family | Why |
 |---|---|
-| GPL-2.0 / GPL-3.0 (any variant) | Strong copyleft would extend to REX when linked or distributed together. |
-| AGPL-3.0 | Network copyleft: running REX as a service would trigger source obligations. |
+| GPL-2.0 / GPL-3.0 (any variant) | Strong copyleft would extend to REX when the GPL code is linked into or combined with REX. Mere aggregation, such as a separate tool in the same image, is reviewed case by case. |
+| AGPL-3.0 | Network copyleft: modifying AGPL code and offering it to users over a network requires providing its source, which would reach REX's service. |
 | LGPL-2.1 / LGPL-3.0, as **linked** dependencies | Relinking and source obligations complicate distribution. |
 | SSPL-1.0, BUSL-1.1 and other source-available licences | Not open source; they restrict use. |
-| No licence, unknown, or "custom" | No grant of rights. Ask the author, or replace the dependency. |
+| No licence, unknown, or "custom" (including `LicenseRef-*` ids such as `LicenseRef-clearlydefined-OTHER`) | No clear grant of rights. Ask the author, replace the dependency, or add a reviewed per-package exception. |
 
 A denied licence can only be used through a documented **exception** (below), never by adding it to the allowlist.
 
@@ -65,7 +77,7 @@ No exceptions yet.
 To add one:
 1. Open an issue explaining the need.
 2. Add the package URL (for example `pkg:pypi/semgrep`) to `allow-dependencies-licenses` in the config.
-3. Add a row here with the reason and the issue.
+3. Add a row here with the package URL in backticks, the reason, and the issue (`#25`, `owner/repo#25`, or an issue or PR link).
 4. Get the owner's approval in the pull request.
 
 ## Third-party notices
