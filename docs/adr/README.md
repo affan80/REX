@@ -13,7 +13,7 @@ REX records every significant or deliberately open decision as an ADR in this fo
 `scripts/check_docs.py` checks naming, numbering, status, date, this index, and links. Run it with:
 
 ```bash
-python3 scripts/check_docs.py
+uv run --no-project --with markdown-it-py==4.3.0 python scripts/check_docs.py
 ```
 
 ## Index
