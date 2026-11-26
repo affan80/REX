@@ -256,10 +256,10 @@ Already decided (2026-11-27):
 5. Plugins stay personal.
 6. Stacked PRs.
 
-**New, needed for v2:**
-- **A. Timing of repo settings.** Apply a minimal ruleset after PR 1 and add required checks as each PR merges (§6), instead of applying everything after the last PR.
-- **B. Commit Claude Code sandbox + deny + hook settings (§5.3).** They apply to every Claude Code session in this repo, including this one once merged. Shell commands then run sandboxed with network limited to the listed dev hosts, and agents can't edit `.claude/**`.
-- **C. Upgrade the host toolchain to current:** uv 0.11 → 0.13.10 (brew), Node 22 → 26 LTS (brew), pnpm 10 → 12 (pinned install).
-- **D. Solo-maintainer ruleset** with 0 required approvals and no bypass actors (§5.10). Code-owner review can't be enforced for a sole maintainer; required checks are the real gate.
+Decided for v2 (2026-11-27):
+- **A. Repo-settings timing: approved.** A minimal ruleset goes on after PR 1, and required checks are added as each PR merges (§6).
+- **B. Committed Claude Code sandbox + deny rules + fail-closed hook (§5.3): approved.** This includes `Edit(.claude/**)` denied to agents.
+- **C. Host toolchain upgrade: approved.** uv → 0.13.10 and Node → 26 LTS via Homebrew; pnpm → 12 via a pinned install.
+- **D. Solo-maintainer ruleset: approved.** 0 required approvals, no bypass actors, required checks as the gate (§5.10).
 
 My calls, which you can override: Python dev default 3.15 with floor 3.13 and a 3.13–3.15 matrix; `rex_<dir>` naming; TS pinned to 6.0.x; SHA pins instead of `actions.lock` for now; osv-scanner for licenses; samples kept outside the repo as password-protected archives; the 0b deferrals in the header.
