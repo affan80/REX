@@ -2,7 +2,7 @@
 
 REX handles hostile artifacts (malware, firmware, exploits) in a **public** repository. These rules keep that safe and keep the history reviewable. They apply to everyone: maintainers, outside contributors and AI agents.
 
-The project's hard rules (untrusted input, deny-by-default, evidence over AI claims, no secrets, no cross-project leakage, and the rest) are in [`CLAUDE.md`](CLAUDE.md) (added with #35) and win over anything here.
+The project's hard rules (untrusted input, deny-by-default, evidence over AI claims, no secrets, no cross-project leakage, and the rest) are in `CLAUDE.md` (added with #35) and win over anything here.
 
 ## 1. Branches
 
