@@ -37,7 +37,7 @@ flowchart TB
 
 ## Level 2 — Containers on the 3-PC lab
 
-The lab is three machines with separate trust levels. Untrusted content is never parsed or executed in the control plane; workers hold no control-plane credentials; all worker network traffic goes through PC 3, which never trusts worker-supplied values.
+The lab is three machines with separate trust levels. Untrusted content is never parsed or executed in the control plane. Workers hold no control-plane credentials and no signing keys: they get per-job, short-lived, pre-signed access to one artifact and return raw results; a trusted evidence service on PC 1 hashes, signs and records them. All worker network traffic goes through PC 3, which never trusts worker-supplied values.
 
 ```mermaid
 flowchart LR
@@ -53,6 +53,7 @@ flowchart LR
         obj[("<b>Object storage</b><br/>[S3-compatible, ADR #4]<br/>Quarantined artifacts,<br/>derived outputs")]
         queue[("<b>Queue / broker</b><br/>[ADR #5]")]
         policy["<b>Policy engine</b><br/>[ADR #7]"]
+        evidence["<b>Evidence service</b><br/>[Python, #57]<br/>Hashes, signs (vetted crypto)<br/>and records results.<br/>Signing keys never leave PC 1"]
     end
 
     subgraph PC2["PC 2 — Workers (untrusted execution)"]
@@ -85,7 +86,10 @@ flowchart LR
     sandbox --- wre
     sandbox --- wdyn
     sandbox --- wval
-    sandbox -- "Artifacts in / signed evidence out<br/>(scoped, short-lived access)" --> obj
+    obj -- "One artifact per job<br/>(pre-signed, short-lived URL)" --> sandbox
+    sandbox -- "Raw results (untrusted)" --> evidence
+    evidence -- "Signed evidence records" --> db
+    evidence -- "Derived outputs" --> obj
     sandbox -- "All egress" --> gw
     gw -- "Allowlisted destinations only" --> ext
 
@@ -94,7 +98,7 @@ flowchart LR
     classDef untrusted fill:#a33b2b,stroke:#6e271d,color:#fff
     classDef gateway fill:#8a6d1d,stroke:#5c4913,color:#fff
     classDef open fill:#6b6b6b,stroke:#4d4d4d,color:#fff,stroke-dasharray: 4 3
-    class web,api,sched,aigw,integ trusted
+    class web,api,sched,aigw,integ,evidence trusted
     class db store
     class wa,wre,wdyn,wval untrusted
     class gw gateway
@@ -103,14 +107,16 @@ flowchart LR
 
 ## Trust boundaries and the rules they enforce
 
+Rule numbers refer to the hard rules in `CLAUDE.md` (added with #35).
+
 | Boundary | What crosses it | Rules that apply (CLAUDE.md) |
 |---|---|---|
 | User ↔ API | Uploads, requests | 3 deny-by-default authorization per project + operation; 4 max 2 GB, content-based identification |
 | API ↔ object storage | Raw artifacts | 2 API never parses or executes untrusted content; 10 per-project isolation |
-| Control plane (PC 1) ↔ workers (PC 2) | Jobs, execution permits, evidence | 1 tool output is untrusted; 5 extraction limits; workers hold no control-plane credentials |
+| Control plane (PC 1) ↔ workers (PC 2) | Jobs, execution permits, raw results | 1 tool output is untrusted; 5 extraction limits; workers hold no control-plane credentials or signing keys |
 | Workers (PC 2) ↔ gateway (PC 3) ↔ internet | All network traffic | 6 no external targets without verified authorization; 7 gateway enforces destinations, protocols, budgets |
 | Platform ↔ AI providers | Classified, redacted context | 8 AI is never proof; 9 no secrets in prompts; 12 official provider APIs only |
-| Evidence store | Signed records | 8 findings link to evidence; 11 vetted crypto only |
+| Evidence service (PC 1) | Raw results in, signed records out | 8 findings link to evidence; 11 vetted crypto only; signing happens only in the trusted zone |
 
 The detailed threat model is tracked in #40.
 
@@ -140,4 +146,3 @@ Service boundaries: no service imports another service's private code; shared ty
 | PC 3 VPN role | #9 |
 | AI data classification and redaction | #12 |
 | External-target authorization proof | #13 |
-| K3s topology across the PCs | #14 |

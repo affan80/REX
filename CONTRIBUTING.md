@@ -21,7 +21,7 @@ git fetch origin
 git switch -c feat/21-secret-scanning origin/dev
 # ...work...
 git push -u origin feat/21-secret-scanning
-gh pr create --base dev --fill
+gh pr create --base dev --title "feat(ci): add secret scanning" --body-file pr-body.md  # body per §6
 ```
 
 ## 2. Working on an issue
@@ -47,15 +47,15 @@ One issue, one branch, one pull request. If an issue turns out to be two concern
 ## 3. Architecture decisions
 
 Some choices are deliberately open: identity provider, broker, sandbox technology, policy engine and the others listed in `CLAUDE.md`. **Don't invent values for them.**
-- Write an ADR in `docs/adr/` with the options and trade-offs.
+- Write an ADR in `docs/adr/` with the options and trade-offs (`status: proposed`).
 - Link it to its `adr` issue.
-- Let the owner decide.
-
-An ADR changes status (Proposed → Accepted / Superseded) in the same PR as the code that depends on it.
+- Let the owner decide in that ADR's pull request: the status becomes `accepted` or `rejected` before it merges.
+- Code that depends on a decision is merged only after its ADR is `accepted`.
+- Later changes get a new ADR; the old one becomes `deprecated` or `superseded by ADR-NNNN`. The full process is in [`docs/adr/README.md`](docs/adr/README.md).
 
 ## 4. Commits and pull-request titles
 
-Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Pull-request titles follow the same format, because the squash commit takes the PR title.
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Pull-request titles follow the same format, and the squash commit on `dev` must use the PR title as its subject (set it when you merge until the repository default is changed in #32).
 
 ```
 <type>(<optional scope>): <imperative summary, lower case, no period>
@@ -83,7 +83,14 @@ REX is test-driven.
 - Tests exercise real behaviour. Run the checker, script or code against controlled inputs and assert outcomes and exit codes. Don't search source text, and don't assert on mocks.
 - Configuration files are validated by the tools that read them (schema validators, `uv lock --check`, linters), not by text-matching tests. Prose such as docs and ADRs needs no tests.
 - Fixtures that look like secrets or binaries are **generated at test time** in a temporary directory. They are never committed.
-- Before asking for review, run the full suite, not just your new test.
+- Before asking for review, run the full suite, not just your new test. Today that is:
+
+  ```bash
+  uv run --no-project --with pytest==9.2.0 --with markdown-it-py==4.3.0 pytest tests/repo
+  uv run --no-project --with markdown-it-py==4.3.0 python scripts/check_docs.py
+  ```
+
+  These become `just test` and `just guards` once the dev tooling lands (#34). New files must be staged (`git add`) before `check_docs.py` sees them, because it checks what git tracks.
 
 ## 6. Pull requests
 
@@ -112,8 +119,8 @@ Docs and ADRs are updated **in the same pull request** as the code they describe
 
 The repository is public. Anything committed can be copied before it is deleted.
 - **Never commit samples or binaries.** That includes executables, archives, disk images, PCAPs from real targets, or anything that came from an untrusted source. Real samples live **outside the repository** in `~/.rex-samples/`, stored as password-protected archives (password `infected`, the industry convention).
-- **Never run an unknown sample on your own machine.** Analysis runs only inside the REX sandboxes.
-- **No secrets anywhere:** not in code, tests, docs, issues, commit messages or logs. Local secrets go in `.env` / `.env.local`, which are git-ignored. `.env.example` holds names only.
+- **Never run or unpack an unknown sample on your own machine.** Analysis runs only inside the REX sandboxes. Keep `~/.rex-samples/` out of cloud sync and backups.
+- **No secrets anywhere:** not in code, tests, docs, issues, commit messages or logs. Local secrets go in `.env` / `.env.local`, which must never be committed (the repository `.gitignore` that ignores them lands with #37; until then, check `git status` before every commit). `.env.example` holds names only.
 - **No Git LFS.** LFS objects are public too and hard to purge.
 - If you commit a secret by mistake, **rotate it first**, then tell the owner privately (see §10). Removing it from history isn't enough.
 
@@ -128,10 +135,10 @@ Pin versions through the lockfiles (`uv.lock`, `pnpm-lock.yaml`) and commit them
 ## 9. AI agents in this repository
 
 AI coding agents follow the same rules as people, plus these:
-- `CLAUDE.md` holds the project rules. Repository settings in `.claude/` (permissions, sandbox, hooks) enforce the safety-critical ones. Agents must not weaken them; only humans edit `.claude/`.
+- `CLAUDE.md` holds the project rules. Repository settings in `.claude/` (permissions, sandbox, hooks; added with #35) enforce the safety-critical ones. Agents must not weaken them; only humans edit `.claude/`.
 - Agents post their plan on the issue before coding, and report at the end what changed, which tests ran with their results, and any open risks.
 - Optional personal plugins (for example *superpowers* or *ponytail*) are each contributor's choice and are not configured in the repository. Install ponytail only from `DietrichGebert/ponytail`, and **leave its webhook URL empty** so task data never leaves your machine. `CLAUDE.md` and these rules override any plugin's defaults.
 
 ## 10. Reporting security problems
 
-Don't open a public issue for a vulnerability. Use GitHub's **private vulnerability reporting** (Security tab → *Report a vulnerability*); details will be in `SECURITY.md` (added with #32).
+Don't open a public issue for a vulnerability. Use GitHub's **private vulnerability reporting** (Security tab → *Report a vulnerability*); it is enabled for this repository. A `SECURITY.md` with the full policy lands with #32.

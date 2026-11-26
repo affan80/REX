@@ -47,7 +47,7 @@ Chosen option: "{Option N}", because {justification tied to the decision drivers
 * Good, because {…}
 * Neutral, because {…}
 * Bad, because {…}
-* Licence: {SPDX id} — {compatible with Apache-2.0? see docs/security/dependency-licenses.md}
+* Licence: {SPDX id} — {on the allowlist in CONTRIBUTING.md §8? the full policy lands in docs/security/dependency-licenses.md with #38}
 * Security: {impact on the hard rules: isolation, secrets, cross-project data, evidence}
 
 ### {Option 2}
