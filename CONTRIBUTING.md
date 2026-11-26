@@ -126,7 +126,7 @@ The repository is public. Anything committed can be copied before it is deleted.
 
 ## 8. Dependencies and licences
 
-REX is Apache-2.0. Every new dependency needs a licence check before it is added.
+REX is [Apache-2.0](LICENSE). Every new dependency needs a licence check before it is added. The full policy, including the exception process, is [`docs/security/dependency-licenses.md`](docs/security/dependency-licenses.md); its machine-readable source is `.github/dependency-review-config.yml`.
 - **Allowed:** MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, PSF-2.0, 0BSD, CC0-1.0, Unlicense, Zlib, MPL-2.0.
 - **Not allowed** without a documented exception: GPL, AGPL, LGPL (as linked dependencies), SSPL, BUSL, or no/unknown licence.
 
